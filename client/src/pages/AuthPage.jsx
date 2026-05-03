@@ -89,7 +89,6 @@ export default function AuthPage({
       }`}
     >
       <AuthHeader
-        isLogin={isLogin}
         isDark={isDark}
         themeToggleAnimating={themeToggleAnimating}
         onToggleTheme={handleToggleTheme}

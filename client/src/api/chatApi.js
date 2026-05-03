@@ -255,6 +255,20 @@ export const hideChats = ({ username, chatIds }) =>
     body: JSON.stringify({ username, chatIds }),
   });
 
+export const setContactName = ({ username, contactUsername, name }) =>
+  apiFetch(`${API_BASE}/api/contacts/${encodeURIComponent(contactUsername)}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ username, name }),
+  });
+
+export const deleteContact = ({ username, contactUsername }) =>
+  apiFetch(`${API_BASE}/api/contacts/${encodeURIComponent(contactUsername)}`, {
+    method: "DELETE",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ username }),
+  });
+
 export const listMessages = (chatId, params = {}) => {
   const search = new URLSearchParams(params);
   const query = search.toString();

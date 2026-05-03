@@ -95,6 +95,9 @@ import {
   deletePushSubscription,
   listPushSubscriptionsByUserIds,
   listMutedUserIdsForChat,
+  getContactName,
+  setContactName,
+  deleteContactName,
 } from "./db.js";
 
 process.title = "cheetah-chat-server";
@@ -557,6 +560,9 @@ const apiDeps = {
   upsertPushSubscription,
   sendPushNotificationToUsers,
   storageEncryption,
+  getContactName,
+  setContactName,
+  deleteContactName,
 };
 
 registerApiRoutes(app, apiDeps);

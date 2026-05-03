@@ -1,9 +1,10 @@
 import { Suspense, lazy, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import logo from './assets/cheetah-chat-logo.jpg'
+
 import { APP_CONFIG } from './settings/appConfig.js'
 import InstallBar from './components/pwa/InstallBar.jsx'
 import InstallGuideModal from './components/pwa/InstallGuideModal.jsx'
+import logo from './assets/cheetah-chat-logo.jpg'
 
 const API_BASE = ''
 const AUTH_REDIRECT_KEY = 'cheetah-chat-auth-redirect'
@@ -921,15 +922,15 @@ export default function App() {
           }}
         >
           {isAuthRoute ? (
-            <header className="flex flex-wrap items-center justify-center gap-3 text-center sm:gap-4">
-              <div className="flex items-center gap-1 text-black dark:text-white">
-                <div className="flex h-10 w-10 items-center justify-center sm:h-11 sm:w-11">
-                  <img src={logo} alt="Cheetah Chat logo" className="h-10 w-10" />
+            <header className="flex flex-col items-center justify-center  text-center sm:gap-4">
+              <div className="flex flex-row items-center  sm:-mb-5 text-black dark:text-white">
+                <div className="flex h-25 w-25 items-center justify-center sm:h-15 sm:w-15">
+                  <img src="/icons/logo_png.png" alt="" className="h-20  w-20" />
                 </div>
-                <div>
-                  <p className="text-xl font-bold tracking-tight sm:text-2xl">Cheetah Chat</p>
+                
+              </div><div>
+                  <p className="text-base font-bold tracking-tight sm:text-2xl">Cheetah Chat</p>
                 </div>
-              </div>
             </header>
           ) : null}
 

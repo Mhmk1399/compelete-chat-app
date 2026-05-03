@@ -1,8 +1,10 @@
 import { Suspense, lazy, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import MobileTabMenu from "../components/navigation/MobileTabMenu.jsx";
+import NavRail from "../components/navigation/NavRail.jsx";
 import ChatWindowPanel from "../components/chat/ChatWindowPanel.jsx";
 import { ChatSidebar } from "../components/sidebar/index.js";
 import AppContextMenu from "../components/context-menu/AppContextMenu.jsx";
+import ComingSoonModal from "../components/modals/ComingSoonModal.jsx";
 import { useAppContextMenu } from "../components/context-menu/useAppContextMenu.js";
 import { CHAT_PAGE_CONFIG } from "../settings/chatPageConfig.js";
 import { getAvatarInitials } from "../utils/avatarInitials.js";
@@ -99,6 +101,8 @@ import {
   updateProfile,
   updateStatus as updateStatusRequest,
   uploadAvatar,
+  setContactName as apiSetContactName,
+  deleteContact as apiDeleteContact,
 } from "../api/chatApi.js";
 import { APP_CONFIG } from "../settings/appConfig.js";
 import {
@@ -284,6 +288,8 @@ export default function ChatPage({ user, setUser, isDark, setIsDark, toggleTheme
   const [loadingOlderMessages, setLoadingOlderMessages] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [mobileTab, setMobileTab] = useState("chats");
+  const [chatTypeFilter, setChatTypeFilter] = useState(null);
+  const [callModalOpen, setCallModalOpen] = useState(false);
   const [settingsPanel, setSettingsPanel] = useState(null);
   const [chatsSearchFocused, setChatsSearchFocused] = useState(false);
   const [profileModalOpen, setProfileModalOpen] = useState(false);
@@ -1663,6 +1669,11 @@ export default function ChatPage({ user, setUser, isDark, setIsDark, toggleTheme
     activeChatTypeRef,
     activePeer,
   });
+  const filteredVisibleChats = useMemo(() => {
+    if (!chatTypeFilter) return visibleChats;
+    return visibleChats.filter((c) => c.type === chatTypeFilter);
+  }, [visibleChats, chatTypeFilter]);
+
   const activeHeaderAvatarIcon = isActiveSavedChat ? (
     <Bookmark size={18} className="text-white" />
   ) : null;
@@ -4858,6 +4869,38 @@ export default function ChatPage({ user, setUser, isDark, setIsDark, toggleTheme
     setMentionProfile(null);
   };
 
+  const handleSaveContactName = async (contactUsername, name) => {
+    if (!user?.username || !contactUsername) return;
+    try {
+      await apiSetContactName({ username: user.username, contactUsername, name });
+      await loadChats({ silent: true });
+    } catch {
+      // ignore errors silently — modal handles its own saving state
+    }
+  };
+
+  const handleDeleteContact = async (contactUsername) => {
+    if (!user?.username || !contactUsername) return;
+    try {
+      await apiDeleteContact({ username: user.username, contactUsername });
+      await loadChats({ silent: true });
+      const deletedChat = chats.find(
+        (chat) =>
+          chat.type === "dm" &&
+          (chat.members || []).some(
+            (m) =>
+              String(m.username || "").toLowerCase() ===
+              contactUsername.toLowerCase(),
+          ),
+      );
+      if (deletedChat && Number(activeChatId) === Number(deletedChat.id)) {
+        setActiveChatId(null);
+      }
+    } catch {
+      // ignore errors silently
+    }
+  };
+
   const openSelfProfileEditor = () => {
     closeProfileModal();
     setShowSettings(false);
@@ -5396,13 +5439,61 @@ export default function ChatPage({ user, setUser, isDark, setIsDark, toggleTheme
         paddingRight: "max(0px, env(safe-area-inset-right))",
       }}
     >
+      <NavRail
+        user={user}
+        displayInitials={displayInitials}
+        userColor={userColor}
+        isDark={isDark}
+        toggleTheme={toggleTheme}
+        isSavedChatActive={isActiveSavedChat}
+        settingsPanel={settingsPanel}
+        showSettings={showSettings}
+        chatTypeFilter={chatTypeFilter}
+        onOpenChats={() => {
+          setChatTypeFilter(null);
+          setMobileTab("chats");
+          setSettingsPanel(null);
+          setShowSettings(false);
+        }}
+        onOpenGroups={() => {
+          setChatTypeFilter("group");
+          setMobileTab("chats");
+          setSettingsPanel(null);
+          setShowSettings(false);
+        }}
+        onOpenChannels={() => {
+          setChatTypeFilter("channel");
+          setMobileTab("chats");
+          setSettingsPanel(null);
+          setShowSettings(false);
+        }}
+        onOpenSavedMessages={openSavedMessages}
+        onOpenProfile={() => {
+          setSettingsPanel("profile");
+          setShowSettings(false);
+        }}
+        onOpenSecurity={() => {
+          setSettingsPanel("security");
+          setShowSettings(false);
+        }}
+        onOpenData={() => {
+          setSettingsPanel("data");
+          setShowSettings(false);
+        }}
+        onOpenNotifications={() => setNotificationsModalOpen(true)}
+        onPeerCall={() => setCallModalOpen(true)}
+        onGroupCall={() => setCallModalOpen(true)}
+        onLogout={handleLogout}
+        settingsButtonRef={settingsButtonRef}
+      />
+
       <ChatSidebar
         mobileTab={mobileTab}
         isConnected={isConnected}
         isUpdating={isUpdatingChats}
         scrollEpoch={sidebarScrollEpoch}
         editMode={editMode}
-        visibleChats={visibleChats}
+        visibleChats={filteredVisibleChats}
         selectedChats={selectedChats}
         loadingChats={loadingChats}
         activeChatId={activeChatId}
@@ -5493,6 +5584,8 @@ export default function ChatPage({ user, setUser, isDark, setIsDark, toggleTheme
         settingsButtonRef={settingsButtonRef}
         displayInitials={displayInitials}
         onOpenWhatsNew={handleOpenWhatsNew}
+        onPeerCall={() => setCallModalOpen(true)}
+        onGroupCall={() => setCallModalOpen(true)}
       />
 
       <ChatWindowPanel
@@ -5594,7 +5687,18 @@ export default function ChatPage({ user, setUser, isDark, setIsDark, toggleTheme
         hidden={mobileTab === "chat" && activeChatId}
         mobileTab={mobileTab}
         onChats={() => {
+          setChatTypeFilter(null);
           setMobileTab("chats");
+          setSettingsPanel(null);
+        }}
+        onGroups={() => {
+          setChatTypeFilter("group");
+          setMobileTab("groups");
+          setSettingsPanel(null);
+        }}
+        onChannels={() => {
+          setChatTypeFilter("channel");
+          setMobileTab("channels");
           setSettingsPanel(null);
         }}
         onSettings={() => setMobileTab("settings")}
@@ -5779,6 +5883,10 @@ export default function ChatPage({ user, setUser, isDark, setIsDark, toggleTheme
             onOpenUserContextMenu={openContextMenu}
             onEditGroup={openEditGroupFromProfile}
             onEditSelfProfile={openSelfProfileEditor}
+            onCall={() => setCallModalOpen(true)}
+            onGroupCall={() => setCallModalOpen(true)}
+            onSaveContactName={handleSaveContactName}
+            onDeleteContact={handleDeleteContact}
           />
         </Suspense>
       ) : null}
@@ -5845,6 +5953,11 @@ export default function ChatPage({ user, setUser, isDark, setIsDark, toggleTheme
       ) : null}
 
       <AppContextMenu menu={contextMenu} onClose={closeContextMenu} />
+
+      <ComingSoonModal
+        open={callModalOpen}
+        onClose={() => setCallModalOpen(false)}
+      />
     </div>
   );
 }

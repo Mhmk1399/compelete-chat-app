@@ -1,4 +1,3 @@
-import { Settings } from "../../../icons/lucide.js";
 import Avatar from "../../common/Avatar.jsx";
 import { hasPersian } from "../../../utils/fontUtils.js";
 
@@ -9,13 +8,11 @@ export default function SidebarFooter({
   statusDotClass,
   statusValue,
   userColor,
-  onOpenSettings,
   onOpenOwnProfile,
-  settingsButtonRef,
 }) {
   return (
     <div className="hidden h-[88px] border-t border-slate-300/80 bg-white px-6 py-4 dark:border-emerald-500/20 dark:bg-slate-900 md:absolute md:bottom-0 md:left-0 md:right-0 md:block">
-      <div className="flex h-full items-center justify-between">
+      <div className="flex h-full items-center">
         <button
           type="button"
           onClick={onOpenOwnProfile}
@@ -43,15 +40,6 @@ export default function SidebarFooter({
               {statusValue}
             </p>
           </div>
-        </button>
-        <button
-          type="button"
-          onClick={onOpenSettings}
-          className="flex items-center justify-center rounded-full border border-emerald-200 bg-white/80 p-2 text-emerald-700 transition hover:border-emerald-300 hover:shadow-[0_0_16px_rgba(0,218,253,0.22)] dark:border-emerald-500/30 dark:bg-slate-950 dark:text-emerald-200"
-          aria-label="Open settings"
-          ref={settingsButtonRef}
-        >
-          <Settings size={18} className="icon-anim-spin-dir" />
         </button>
       </div>
     </div>

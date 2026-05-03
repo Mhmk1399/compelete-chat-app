@@ -10,6 +10,10 @@ import {
   LogIn,
   LogOut,
   Pencil,
+  Phone,
+  Trash,
+  UserPlus,
+  Video,
   Volume2,
   VolumeX,
 } from "../../icons/lucide.js";
@@ -37,6 +41,10 @@ export default function ChatProfileModal({
   onOpenUserContextMenu,
   onEditGroup,
   onEditSelfProfile,
+  onCall,
+  onGroupCall,
+  onSaveContactName,
+  onDeleteContact,
   showJoinAction = false,
   onJoinChat,
   showMembers = true,
@@ -46,11 +54,21 @@ export default function ChatProfileModal({
   const [memberQuery, setMemberQuery] = useState("");
   const [memberLimit, setMemberLimit] = useState(membersBatchSize);
   const [copiedInviteLink, setCopiedInviteLink] = useState(false);
+  const [editingContact, setEditingContact] = useState(false);
+  const [editContactName, setEditContactName] = useState("");
+  const [savingContact, setSavingContact] = useState(false);
+  const [deletingContact, setDeletingContact] = useState(false);
+  const [copiedUsername, setCopiedUsername] = useState(false);
   const membersListRef = useRef(null);
   const handleClose = () => {
     setMemberQuery("");
     setMemberLimit(membersBatchSize);
     setCopiedInviteLink(false);
+    setEditingContact(false);
+    setEditContactName("");
+    setSavingContact(false);
+    setDeletingContact(false);
+    setCopiedUsername(false);
     onClose?.();
   };
 
@@ -232,52 +250,166 @@ export default function ChatProfileModal({
             </button>
           </div>
         ) : !isReadOnly && !isSelfProfile && !isSaved ? (
-          <div
-            className={`mt-4 ${
-              isGroup || isChannel
-                ? "grid grid-cols-3 gap-2"
-                : "mx-auto grid w-full max-w-[18rem] grid-cols-2 gap-2"
-            }`}
-          >
-            <button
-              type="button"
-              onClick={onOpenChat}
-              className="group rounded-2xl border border-emerald-200 bg-white px-2 py-3 text-emerald-700 transition hover:border-emerald-300 hover:bg-emerald-50 dark:border-emerald-500/30 dark:bg-slate-900 dark:text-emerald-200 dark:hover:bg-emerald-500/10"
-            >
-              <div className="mx-auto inline-flex h-11 w-11 items-center justify-center rounded-full">
-                <Chat size={24} className="icon-anim-bob" />
-              </div>
-              <p className="mt-1 text-xs font-semibold">Chat</p>
-            </button>
-            <button
-              type="button"
-              onClick={onToggleMute}
-              className="group rounded-2xl border border-emerald-200 bg-white px-2 py-3 text-emerald-700 transition hover:border-emerald-300 hover:bg-emerald-50 dark:border-emerald-500/30 dark:bg-slate-900 dark:text-emerald-200 dark:hover:bg-emerald-500/10"
-            >
-              <div className="mx-auto inline-flex h-11 w-11 items-center justify-center rounded-full">
-                {muted ? (
-                  <Volume2 size={24} className="icon-anim-sway" />
-                ) : (
-                  <VolumeX size={24} className="icon-anim-sway" />
-                )}
-              </div>
-              <p className="mt-1 text-xs font-semibold">
-                {muted ? "Unmute" : "Mute"}
-              </p>
-            </button>
-            {isGroup || isChannel ? (
+          <>
+            {/* Compact icon-only action row */}
+            <div className="mt-5 flex items-center justify-center gap-3">
               <button
                 type="button"
-                onClick={onLeaveGroup}
-                className="group rounded-2xl border border-rose-200 bg-rose-50 px-2 py-3 text-rose-600 transition hover:border-rose-300 hover:bg-rose-100 dark:border-rose-500/30 dark:bg-rose-900/30 dark:text-rose-200 dark:hover:bg-rose-900/45"
+                onClick={onOpenChat}
+                title="Chat"
+                className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-emerald-200 bg-white text-emerald-700 transition hover:border-emerald-300 hover:bg-emerald-50 hover:shadow-[0_0_14px_rgba(0,218,253,0.18)] dark:border-emerald-500/30 dark:bg-slate-900 dark:text-emerald-200 dark:hover:bg-emerald-500/10"
               >
-                <div className="mx-auto inline-flex h-11 w-11 items-center justify-center rounded-full">
-                  <LogOut size={24} className="icon-anim-slide" />
-                </div>
-                <p className="mt-1 text-xs font-semibold">Leave</p>
+                <Chat size={18} className="icon-anim-bob" />
               </button>
+              {!isGroup && !isChannel ? (
+                <>
+                  <button
+                    type="button"
+                    onClick={onCall}
+                    title="Call"
+                    className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-emerald-200 bg-white text-emerald-700 transition hover:border-emerald-300 hover:bg-emerald-50 hover:shadow-[0_0_14px_rgba(0,218,253,0.18)] dark:border-emerald-500/30 dark:bg-slate-900 dark:text-emerald-200 dark:hover:bg-emerald-500/10"
+                  >
+                    <Phone size={18} className="icon-anim-bob" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={onGroupCall}
+                    title="Group call"
+                    className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-emerald-200 bg-white text-emerald-700 transition hover:border-emerald-300 hover:bg-emerald-50 hover:shadow-[0_0_14px_rgba(0,218,253,0.18)] dark:border-emerald-500/30 dark:bg-slate-900 dark:text-emerald-200 dark:hover:bg-emerald-500/10"
+                  >
+                    <Video size={18} className="icon-anim-bob" />
+                  </button>
+                </>
+              ) : null}
+              <button
+                type="button"
+                onClick={onToggleMute}
+                title={muted ? "Unmute" : "Mute"}
+                className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-emerald-200 bg-white text-emerald-700 transition hover:border-emerald-300 hover:bg-emerald-50 hover:shadow-[0_0_14px_rgba(0,218,253,0.18)] dark:border-emerald-500/30 dark:bg-slate-900 dark:text-emerald-200 dark:hover:bg-emerald-500/10"
+              >
+                {muted ? (
+                  <Volume2 size={18} className="icon-anim-sway" />
+                ) : (
+                  <VolumeX size={18} className="icon-anim-sway" />
+                )}
+              </button>
+              {isGroup || isChannel ? (
+                <button
+                  type="button"
+                  onClick={onLeaveGroup}
+                  title="Leave"
+                  className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-rose-200 bg-rose-50 text-rose-600 transition hover:border-rose-300 hover:bg-rose-100 hover:shadow-[0_0_14px_rgba(229,62,95,0.18)] dark:border-rose-500/30 dark:bg-rose-900/30 dark:text-rose-200 dark:hover:bg-rose-500/10"
+                >
+                  <LogOut size={18} className="icon-anim-slide" />
+                </button>
+              ) : null}
+            </div>
+
+            {/* Contact actions — DM only */}
+            {!isGroup && !isChannel ? (
+              <>
+                <hr className="mt-5 border-t border-emerald-100 dark:border-emerald-500/20" />
+                <div className="mt-3 flex flex-col gap-2">
+                  <div className="flex items-center justify-center gap-3">
+                    {/* Edit contact */}
+                    <button
+                      type="button"
+                      title="Edit contact"
+                      onClick={() => {
+                        if (!editingContact) {
+                          setEditContactName(
+                            String(targetUser?.contact_name || targetUser?.nickname || ""),
+                          );
+                        }
+                        setEditingContact((v) => !v);
+                      }}
+                      className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-emerald-200 bg-white text-emerald-700 transition hover:border-emerald-300 hover:bg-emerald-50 hover:shadow-[0_0_14px_rgba(0,218,253,0.18)] dark:border-emerald-500/30 dark:bg-slate-900 dark:text-emerald-200 dark:hover:bg-emerald-500/10"
+                    >
+                      <Pencil size={16} />
+                    </button>
+
+                    {/* Delete contact */}
+                    <button
+                      type="button"
+                      title="Delete contact"
+                      disabled={deletingContact}
+                      onClick={async () => {
+                        if (deletingContact) return;
+                        setDeletingContact(true);
+                        try {
+                          await onDeleteContact?.(String(targetUser?.username || ""));
+                          handleClose();
+                        } finally {
+                          setDeletingContact(false);
+                        }
+                      }}
+                      className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-rose-200 bg-rose-50 text-rose-600 transition hover:border-rose-300 hover:bg-rose-100 hover:shadow-[0_0_14px_rgba(229,62,95,0.18)] disabled:opacity-50 dark:border-rose-500/30 dark:bg-rose-900/30 dark:text-rose-400 dark:hover:bg-rose-500/10"
+                    >
+                      <Trash size={16} className={deletingContact ? "opacity-50" : ""} />
+                    </button>
+
+                    {/* Share contact */}
+                    <button
+                      type="button"
+                      title={copiedUsername ? "Copied!" : "Share contact"}
+                      onClick={async () => {
+                        const uname = String(targetUser?.username || "");
+                        if (!uname) return;
+                        try {
+                          await copyTextToClipboard(`@${uname}`);
+                          setCopiedUsername(true);
+                          window.setTimeout(() => setCopiedUsername(false), 1400);
+                        } catch {
+                          // ignore clipboard errors
+                        }
+                      }}
+                      className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-emerald-200 bg-white text-emerald-700 transition hover:border-emerald-300 hover:bg-emerald-50 hover:shadow-[0_0_14px_rgba(0,218,253,0.18)] dark:border-emerald-500/30 dark:bg-slate-900 dark:text-emerald-200 dark:hover:bg-emerald-500/10"
+                    >
+                      {copiedUsername ? <Copy size={16} className="text-emerald-500" /> : <UserPlus size={16} />}
+                    </button>
+                  </div>
+
+                  {/* Edit contact inline input */}
+                  {editingContact ? (
+                    <div className="flex gap-2 px-1">
+                      <input
+                        type="text"
+                        value={editContactName}
+                        onChange={(e) => setEditContactName(e.target.value)}
+                        placeholder={
+                          targetUser?.username
+                            ? `Name for @${targetUser.username}`
+                            : "Custom name"
+                        }
+                        maxLength={80}
+                        className="min-w-0 flex-1 rounded-xl border border-emerald-200 bg-white px-3 py-2 text-sm text-slate-700 outline-none transition focus:border-emerald-400 focus:ring-2 focus:ring-emerald-300/60 dark:border-emerald-500/30 dark:bg-slate-900 dark:text-slate-100"
+                      />
+                      <button
+                        type="button"
+                        disabled={savingContact}
+                        onClick={async () => {
+                          if (savingContact) return;
+                          setSavingContact(true);
+                          try {
+                            await onSaveContactName?.(
+                              String(targetUser?.username || ""),
+                              editContactName.trim(),
+                            );
+                            setEditingContact(false);
+                          } finally {
+                            setSavingContact(false);
+                          }
+                        }}
+                        className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700 transition hover:border-emerald-300 hover:bg-emerald-100 disabled:opacity-50 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-200 dark:hover:bg-emerald-500/20"
+                      >
+                        {savingContact ? "Saving…" : "Save"}
+                      </button>
+                    </div>
+                  ) : null}
+                </div>
+              </>
             ) : null}
-          </div>
+          </>
         ) : null}
 
         {!isReadOnly && (isGroup || isChannel) && canViewInvite ? (

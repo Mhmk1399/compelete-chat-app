@@ -1646,3 +1646,36 @@ export function adminRun(sql, params = []) {
 export function adminSave() {
   saveDatabase();
 }
+
+export function getContactName(ownerUserId, contactUsername) {
+  const row = getRow(
+    "SELECT custom_name FROM contact_names WHERE owner_user_id = ? AND contact_username = ?",
+    [Number(ownerUserId), String(contactUsername || "").toLowerCase()],
+  );
+  return row ? String(row.custom_name || "") : null;
+}
+
+export function setContactName(ownerUserId, contactUsername, customName) {
+  const name = String(customName || "").trim();
+  if (!name) {
+    run(
+      "DELETE FROM contact_names WHERE owner_user_id = ? AND contact_username = ?",
+      [Number(ownerUserId), String(contactUsername || "").toLowerCase()],
+    );
+    return;
+  }
+  run(
+    `INSERT INTO contact_names (owner_user_id, contact_username, custom_name)
+     VALUES (?, ?, ?)
+     ON CONFLICT(owner_user_id, contact_username) DO UPDATE SET custom_name = excluded.custom_name`,
+    [Number(ownerUserId), String(contactUsername || "").toLowerCase(), name],
+  );
+}
+
+export function deleteContactName(ownerUserId, contactUsername) {
+  run(
+    "DELETE FROM contact_names WHERE owner_user_id = ? AND contact_username = ?",
+    [Number(ownerUserId), String(contactUsername || "").toLowerCase()],
+  );
+}
+

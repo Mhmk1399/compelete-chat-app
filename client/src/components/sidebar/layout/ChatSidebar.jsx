@@ -4,7 +4,6 @@ import {
   MobileSettingsPanel,
   SettingsMenuPopover,
 } from "../../settings/index.js";
-import SidebarFooter from "../footer/SidebarFooter.jsx";
 import SidebarHeader from "../header/SidebarHeader.jsx";
 
 export default function ChatSidebar({
@@ -99,6 +98,8 @@ export default function ChatSidebar({
   settingsButtonRef,
   displayInitials,
   onOpenWhatsNew,
+  onPeerCall,
+  onGroupCall,
 }) {
   const chatsScrollRef = useRef(null);
   const chatsContentRef = useRef(null);
@@ -155,7 +156,7 @@ export default function ChatSidebar({
   return (
     <aside
       className={
-        "relative flex h-full min-h-0 w-full flex-col overflow-hidden border-x border-slate-300/80 bg-white shadow-lg shadow-emerald-500/10 dark:border-white/5 dark:bg-slate-900 md:border md:w-[35%] md:pb-[88px] md:shadow-xl md:shadow-emerald-500/15 " +
+        "relative flex h-full min-h-0 w-full flex-col overflow-hidden border-x border-slate-300/80 bg-white shadow-lg shadow-emerald-500/10 dark:border-white/5 dark:bg-slate-900 md:border md:w-72 md:shadow-xl md:shadow-emerald-500/15 " +
         (mobileTab === "chat" ? "hidden md:block" : "block")
       }
     >
@@ -263,6 +264,8 @@ export default function ChatSidebar({
               appInfoLoading={appInfoLoading}
               appInfoError={appInfoError}
               onOpenWhatsNew={onOpenWhatsNew}
+              onPeerCall={onPeerCall}
+              onGroupCall={onGroupCall}
             />
           </div>
         ) : null}
@@ -323,18 +326,6 @@ export default function ChatSidebar({
           </div>
         </div>
       </div>
-
-      <SidebarFooter
-        user={user}
-        displayName={displayName}
-        displayInitials={displayInitials}
-        statusDotClass={statusDotClass}
-        statusValue={statusValue}
-        userColor={userColor}
-        onOpenSettings={onOpenSettings}
-        onOpenOwnProfile={onOpenOwnProfile}
-        settingsButtonRef={settingsButtonRef}
-      />
     </aside>
   );
 }

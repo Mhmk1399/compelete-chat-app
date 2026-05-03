@@ -49,6 +49,7 @@ function registerChatRoutes(app, deps) {
     unhideChat,
     uploadAvatar,
     setChatMemberRole,
+    getContactName,
   } = deps;
 
   const resolveClientBaseOrigin = (req) => {
@@ -114,11 +115,18 @@ function registerChatRoutes(app, deps) {
     }
 
     let chats = listChatsForUser(user.id).map((conv) => {
-      const members = listChatMembers(conv.id).map((member) => ({
+      let members = listChatMembers(conv.id).map((member) => ({
         ...member,
         avatar_url: ensureAvatarExists(member.id, member.avatar_url),
       }));
-
+      if (String(conv.type || "").toLowerCase() === "dm") {
+        members = members.map((member) => {
+          if (String(member.username || "").toLowerCase() === username.toLowerCase()) return member;
+          const customName = getContactName(user.id, String(member.username || "").toLowerCase());
+          if (!customName) return member;
+          return { ...member, nickname: customName, contact_name: customName };
+        });
+      }
       return { ...conv, members };
     });
 
@@ -138,11 +146,18 @@ function registerChatRoutes(app, deps) {
         });
       }
       chats = listChatsForUser(user.id).map((conv) => {
-        const members = listChatMembers(conv.id).map((member) => ({
+        let members = listChatMembers(conv.id).map((member) => ({
           ...member,
           avatar_url: ensureAvatarExists(member.id, member.avatar_url),
         }));
-
+        if (String(conv.type || "").toLowerCase() === "dm") {
+          members = members.map((member) => {
+            if (String(member.username || "").toLowerCase() === username.toLowerCase()) return member;
+            const customName = getContactName(user.id, String(member.username || "").toLowerCase());
+            if (!customName) return member;
+            return { ...member, nickname: customName, contact_name: customName };
+          });
+        }
         return { ...conv, members };
       });
     }

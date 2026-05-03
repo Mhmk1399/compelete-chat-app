@@ -3,8 +3,10 @@ import {
   ArrowLeft,
   Eye,
   EyeOff,
+  Phone,
   Trash,
   Upload,
+  Video,
 } from "../../../icons/lucide.js";
 import { hasPersian } from "../../../utils/fontUtils.js";
 import { getAvatarInitials } from "../../../utils/avatarInitials.js";
@@ -60,7 +62,8 @@ export function MobileSettingsPanel({
   appInfo,
   appInfoLoading,
   appInfoError,
-  onOpenWhatsNew,
+  onPeerCall,
+  onGroupCall,
 }) {
   const handleClosePanel = useCallback(
     () => setSettingsPanel(null),
@@ -135,8 +138,25 @@ export function MobileSettingsPanel({
               onToggleNotifications={onToggleNotifications}
               onOpenNotifications={openNotificationsPanel}
               onOpenSavedMessages={onOpenSavedMessages}
-              onOpenWhatsNew={onOpenWhatsNew}
             />
+          </div>
+          <div className="rounded-2xl border border-slate-300/80 bg-white/90 p-2 text-sm shadow-sm dark:border-emerald-500/20 dark:bg-slate-950/60">
+            <button
+              type="button"
+              onClick={onPeerCall}
+              className="flex w-full items-center gap-3 rounded-xl border border-transparent px-3 py-3 text-left text-base font-medium text-emerald-700 transition hover:border-emerald-300 hover:bg-emerald-100 hover:shadow-[0_0_18px_rgba(0,218,253,0.22)] dark:text-emerald-200 dark:hover:border-emerald-500/30 dark:hover:bg-emerald-500/10"
+            >
+              <Phone size={18} className="icon-anim-sway" />
+              Call
+            </button>
+            <button
+              type="button"
+              onClick={onGroupCall}
+              className="mt-1 flex w-full items-center gap-3 rounded-xl border border-transparent px-3 py-3 text-left text-base font-medium text-emerald-700 transition hover:border-emerald-300 hover:bg-emerald-100 hover:shadow-[0_0_18px_rgba(0,218,253,0.22)] dark:text-emerald-200 dark:hover:border-emerald-500/30 dark:hover:bg-emerald-500/10"
+            >
+              <Video size={18} className="icon-anim-sway" />
+              Group Call
+            </button>
           </div>
         </div>
       ) : null}
@@ -505,31 +525,6 @@ export function MobileSettingsPanel({
               Done
             </button>
           </div>
-        </div>
-      ) : null}
-
-      {settingsPanel === "about" ? (
-        <div className="md:hidden">
-          <div className="mb-4 flex items-center gap-2 rounded-2xl border border-emerald-100/70 bg-white/80 p-4 dark:border-emerald-500/30 dark:bg-slate-950/60">
-            <button
-              type="button"
-              onClick={() => setSettingsPanel(null)}
-              className="inline-flex items-center justify-center rounded-full border border-emerald-200 p-2 text-emerald-700 transition hover:bg-emerald-50 dark:border-emerald-500/30 dark:text-emerald-200 dark:hover:bg-emerald-500/10"
-              aria-label="Back"
-            >
-              <ArrowLeft size={18} />
-            </button>
-            <h4 className="text-sm font-semibold text-emerald-700 dark:text-emerald-200">
-              About
-            </h4>
-          </div>
-          <AboutSettingsPanel
-            appInfo={appInfo}
-            appInfoLoading={appInfoLoading}
-            appInfoError={appInfoError}
-            onDone={handleClosePanel}
-            variant="mobile"
-          />
         </div>
       ) : null}
 
