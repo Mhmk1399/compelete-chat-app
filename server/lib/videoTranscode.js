@@ -374,6 +374,8 @@ export function createVideoTranscodeManager({
 
   const isVideoFileProcessing = (row) => {
     if (!transcodeVideosToH264) return false;
+    // If ffmpeg was checked and found unavailable, transcoding is impossible — not processing.
+    if (ffmpegAvailabilityChecked && !ffmpegAvailable) return false;
     if (String(row?.kind || "").toLowerCase() === "document") return false;
 
     const mimeType = String(row?.mime_type || "").toLowerCase();

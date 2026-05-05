@@ -311,6 +311,7 @@ export default function ChatPage({ user, setUser, isDark, setIsDark, toggleTheme
   const [pendingUploadFiles, setPendingUploadFiles] = useState([]);
   const [pendingUploadType, setPendingUploadType] = useState("");
   const [pendingVoiceMessage, setPendingVoiceMessage] = useState(null);
+  const [pendingVideoMessage, setPendingVideoMessage] = useState(null);
   const [uploadError, setUploadError] = useState("");
   const [activeUploadProgress, setActiveUploadProgress] = useState(null);
   const [replyTarget, setReplyTarget] = useState(null);
@@ -341,6 +342,7 @@ export default function ChatPage({ user, setUser, isDark, setIsDark, toggleTheme
   const smoothScrollLockRef = useRef(0);
   const pendingUploadFilesRef = useRef([]);
   const pendingVoiceMessageRef = useRef(null);
+  const pendingVideoMessageRef = useRef(null);
   const prevUploadProgressRef = useRef(null);
   const mediaLoadSnapTimerRef = useRef(null);
   const messageRefreshTimerRef = useRef(null);
@@ -1236,6 +1238,10 @@ export default function ChatPage({ user, setUser, isDark, setIsDark, toggleTheme
   }, [pendingVoiceMessage]);
 
   useEffect(() => {
+    pendingVideoMessageRef.current = pendingVideoMessage;
+  }, [pendingVideoMessage]);
+
+  useEffect(() => {
     usernameRef.current = String(user?.username || "");
   }, [user?.username]);
 
@@ -1280,6 +1286,9 @@ export default function ChatPage({ user, setUser, isDark, setIsDark, toggleTheme
       });
       if (pendingVoiceMessageRef.current?.previewUrl) {
         URL.revokeObjectURL(pendingVoiceMessageRef.current.previewUrl);
+      }
+      if (pendingVideoMessageRef.current?.previewUrl) {
+        URL.revokeObjectURL(pendingVideoMessageRef.current.previewUrl);
       }
       if (pendingGroupAvatarFile?.previewUrl) {
         URL.revokeObjectURL(pendingGroupAvatarFile.previewUrl);
@@ -1584,6 +1593,7 @@ export default function ChatPage({ user, setUser, isDark, setIsDark, toggleTheme
   useEffect(() => {
     clearPendingUploads();
     clearPendingVoiceMessage();
+    clearPendingVideoMessage();
     setActiveUploadProgress(null);
     setReplyTarget(null);
   }, [activeChatId]);
@@ -3103,6 +3113,7 @@ export default function ChatPage({ user, setUser, isDark, setIsDark, toggleTheme
       pendingMessage._files.forEach((item) => {
         if (item?.file instanceof Blob) {
           const filename = item.name || item.file.name || "upload.bin";
+          console.log("[upload] appending file:", { filename, type: item.file.type, size: item.file.size, uploadType: pendingMessage._uploadType });
           form.append("files", item.file, filename);
           fileMeta.push({
             width: Number.isFinite(Number(item.width)) ? Number(item.width) : null,
@@ -3873,6 +3884,78 @@ export default function ChatPage({ user, setUser, isDark, setIsDark, toggleTheme
     }
   }
 
+  function clearPendingVideoMessage() {
+    setPendingVideoMessage((prev) => {
+      if (prev?.previewUrl) {
+        URL.revokeObjectURL(prev.previewUrl);
+      }
+      return null;
+    });
+  }
+
+  function handleVideoMessageRecorded(payload) {
+    if (!payload?.file) return;
+    if (!CHAT_PAGE_CONFIG.fileUploadEnabled) {
+      setUploadError("File uploads are disabled on this server.");
+      return;
+    }
+    if (fileUploadInProgress || activeUploadProgress !== null) {
+      setUploadError("Please wait for the current upload to finish.");
+      return;
+    }
+    if (pendingVideoMessage) {
+      setUploadError("Remove the video message before recording a new one.");
+      return;
+    }
+    if (pendingVoiceMessage) {
+      setUploadError("Remove the voice message before adding a video message.");
+      return;
+    }
+    if (pendingUploadFiles.length) {
+      setUploadError("Remove attachments before adding a video message.");
+      return;
+    }
+    const file = payload.file;
+    const sizeBytes = Number(file.size || 0);
+    if (sizeBytes > CHAT_PAGE_CONFIG.maxFileSizeBytes) {
+      setUploadError(
+        `Each file must be smaller than ${formatBytesAsMb(CHAT_PAGE_CONFIG.maxFileSizeBytes)}.`,
+      );
+      return;
+    }
+    if (sizeBytes > CHAT_PAGE_CONFIG.maxTotalUploadBytes) {
+      setUploadError(
+        `Total upload size cannot exceed ${formatBytesAsMb(CHAT_PAGE_CONFIG.maxTotalUploadBytes)}.`,
+      );
+      return;
+    }
+    setUploadError("");
+    clearPendingVideoMessage();
+    const previewUrl = URL.createObjectURL(file);
+    setPendingVideoMessage({
+      id: `video-msg-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      file,
+      name: file.name || "video-message",
+      mimeType: payload.mimeType || file.type || "video/webm",
+      sizeBytes,
+      durationSeconds: Number(payload.durationSeconds || 0) || null,
+      previewUrl,
+      kind: "media",
+    });
+    if (activeChatId && !userScrolledUpRef.current) {
+      pendingScrollToBottomRef.current = true;
+      isAtBottomRef.current = true;
+      setIsAtBottom(true);
+      scrollChatToBottom("auto");
+      requestAnimationFrame(() => {
+        scrollChatToBottom("auto");
+      });
+      window.setTimeout(() => {
+        scrollChatToBottom("auto");
+      }, 80);
+    }
+  }
+
   function removePendingUpload(id) {
     setPendingUploadFiles((prev) => {
       const next = prev.filter((file) => {
@@ -4242,7 +4325,8 @@ export default function ChatPage({ user, setUser, isDark, setIsDark, toggleTheme
     const trimmedBody = body.trim();
     const hasPendingFiles = pendingUploadFiles.length > 0;
     const hasPendingVoice = Boolean(pendingVoiceMessage);
-    const hasAnyPendingFiles = hasPendingFiles || hasPendingVoice;
+    const hasPendingVideo = Boolean(pendingVideoMessage);
+    const hasAnyPendingFiles = hasPendingFiles || hasPendingVoice || hasPendingVideo;
     if (!trimmedBody && !hasAnyPendingFiles) return;
     const maxMessageChars = APP_CONFIG.messageMaxChars;
     if (String(body).length > maxMessageChars) {
@@ -4312,6 +4396,31 @@ export default function ChatPage({ user, setUser, isDark, setIsDark, toggleTheme
                 })(),
               ]
             : []),
+          ...(hasPendingVideo && pendingVideoMessage
+            ? [
+                (() => {
+                  const localUrl = pendingVideoMessage.file instanceof Blob
+                    ? URL.createObjectURL(pendingVideoMessage.file)
+                    : pendingVideoMessage.previewUrl || null;
+                  return {
+                    id: pendingVideoMessage.id,
+                    _localId: pendingVideoMessage.id,
+                    kind: "media",
+                    name: pendingVideoMessage.name,
+                    mimeType: pendingVideoMessage.mimeType,
+                    sizeBytes: pendingVideoMessage.sizeBytes,
+                    width: null,
+                    height: null,
+                    durationSeconds: Number.isFinite(Number(pendingVideoMessage.durationSeconds))
+                      ? Number(pendingVideoMessage.durationSeconds)
+                      : null,
+                    url: localUrl,
+                    _localUrl: localUrl,
+                    file: pendingVideoMessage.file,
+                  };
+                })(),
+              ]
+            : []),
         ]
       : [];
     const replyPayload = !isEditingMessage && replyTarget
@@ -4330,12 +4439,15 @@ export default function ChatPage({ user, setUser, isDark, setIsDark, toggleTheme
       ? pendingUploadType
       : hasPendingVoice
         ? "media"
-        : pendingUploadType;
+        : hasPendingVideo
+          ? "media"
+          : pendingUploadType;
 
     if (hasAnyPendingFiles) {
       form.reset();
       clearPendingUploads();
       clearPendingVoiceMessage();
+      clearPendingVideoMessage();
       pendingScrollToBottomRef.current = shouldSnapToBottom;
 
       const pendingMessage = {
@@ -4369,6 +4481,7 @@ export default function ChatPage({ user, setUser, isDark, setIsDark, toggleTheme
       form.reset();
       clearPendingUploads();
       clearPendingVoiceMessage();
+      clearPendingVideoMessage();
       pendingScrollToBottomRef.current = shouldSnapToBottom;
       const pendingMessage = {
         _clientId: tempId,
@@ -4424,6 +4537,7 @@ export default function ChatPage({ user, setUser, isDark, setIsDark, toggleTheme
     form.reset();
     clearPendingUploads();
     clearPendingVoiceMessage();
+    clearPendingVideoMessage();
     pendingScrollToBottomRef.current = shouldSnapToBottom;
     setReplyTarget(null);
 
@@ -5628,6 +5742,7 @@ export default function ChatPage({ user, setUser, isDark, setIsDark, toggleTheme
         pendingUploadFiles={pendingUploadFiles}
         pendingUploadType={pendingUploadType}
         pendingVoiceMessage={pendingVoiceMessage}
+        pendingVideoMessage={pendingVideoMessage}
         uploadError={uploadError}
         activeUploadProgress={activeUploadProgress}
         messageMaxChars={APP_CONFIG.messageMaxChars}
@@ -5637,6 +5752,8 @@ export default function ChatPage({ user, setUser, isDark, setIsDark, toggleTheme
         onClearPendingUploads={clearPendingUploads}
         onVoiceRecorded={handleVoiceRecorded}
         onClearPendingVoiceMessage={clearPendingVoiceMessage}
+        onVideoMessageRecorded={handleVideoMessageRecorded}
+        onClearPendingVideoMessage={clearPendingVideoMessage}
         onMessageInput={handleMessageInput}
         replyTarget={replyTarget}
         onClearReply={handleClearReply}

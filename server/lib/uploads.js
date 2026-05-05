@@ -156,9 +156,14 @@ export function createUploadTools({
   };
 
   const getUploadKind = (uploadType, mimeType = "") => {
-    const type = String(mimeType || "").toLowerCase();
+    // Strip MIME parameters (e.g. "video/webm;codecs=vp8,opus" → "video/webm")
+    const type = String(mimeType || "")
+      .split(";")[0]
+      .trim()
+      .toLowerCase();
+    const normalizedUploadType = String(uploadType || "").trim().toLowerCase();
 
-    if (uploadType === "media") {
+    if (normalizedUploadType === "media") {
       if (
         type.startsWith("image/") ||
         type.startsWith("video/") ||
@@ -169,7 +174,7 @@ export function createUploadTools({
       return null;
     }
 
-    if (uploadType === "document") {
+    if (normalizedUploadType === "document") {
       return "document";
     }
     return null;

@@ -258,6 +258,136 @@ const loadAudioWaveform = async (
   }
 };
 
+const VideoMessageCircle = memo(({ file, handleVideoThumbLoadedMetadata, cacheMediaAspectRatio }) => {
+  const videoRef = useRef(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const [duration, setDuration] = useState(
+    Number.isFinite(Number(file?.durationSeconds)) && Number(file.durationSeconds) > 0
+      ? Number(file.durationSeconds)
+      : 0,
+  );
+
+  const togglePlay = () => {
+    const video = videoRef.current;
+    if (!video) return;
+    if (video.paused) {
+      video.play().catch(() => {});
+    } else {
+      video.pause();
+    }
+  };
+
+  const handleTimeUpdate = () => {
+    const video = videoRef.current;
+    if (!video) return;
+    const dur = Number(video.duration || duration || 0);
+    if (dur > 0) setProgress(video.currentTime / dur);
+  };
+
+  const handleEnded = () => {
+    setIsPlaying(false);
+    setProgress(0);
+    const video = videoRef.current;
+    if (video) video.currentTime = 0;
+  };
+
+  const vmDuration = duration;
+  const elapsed = progress * vmDuration;
+  const remaining = vmDuration - elapsed;
+  const timeLabel = isPlaying
+    ? `-${String(Math.floor(remaining / 60)).padStart(2, "0")}:${String(Math.floor(remaining % 60)).padStart(2, "0")}`
+    : vmDuration > 0
+      ? `${String(Math.floor(vmDuration / 60)).padStart(2, "0")}:${String(Math.round(vmDuration % 60)).padStart(2, "0")}`
+      : null;
+
+  // SVG progress ring
+  const SIZE = 200;
+  const STROKE = 3;
+  const RADIUS = (SIZE - STROKE) / 2;
+  const CIRCUMFERENCE = 2 * Math.PI * RADIUS;
+  const strokeDashoffset = CIRCUMFERENCE * (1 - progress);
+
+  return (
+    <div
+      className="relative overflow-hidden rounded-full"
+      style={{ width: `${SIZE}px`, height: `${SIZE}px` }}
+    >
+      {/* video fills the circle */}
+      <video
+        ref={videoRef}
+        key={file.url}
+        src={file.url}
+        playsInline
+        preload="auto"
+        onLoadedMetadata={(event) => {
+          const video = event.currentTarget;
+          const dur = Number(video.duration || 0);
+          if (Number.isFinite(dur) && dur > 0) setDuration(dur);
+          cacheMediaAspectRatio?.(file, video.videoWidth, video.videoHeight);
+          handleVideoThumbLoadedMetadata?.(event);
+        }}
+        onPlay={() => setIsPlaying(true)}
+        onPause={() => setIsPlaying(false)}
+        onEnded={handleEnded}
+        onTimeUpdate={handleTimeUpdate}
+        className="h-full w-full object-cover"
+      />
+
+      {/* progress ring */}
+      <svg
+        className="pointer-events-none absolute inset-0"
+        width={SIZE}
+        height={SIZE}
+        style={{ transform: "rotate(-90deg)" }}
+      >
+        <circle
+          cx={SIZE / 2}
+          cy={SIZE / 2}
+          r={RADIUS}
+          fill="none"
+          stroke="rgba(255,255,255,0.25)"
+          strokeWidth={STROKE}
+        />
+        {progress > 0 ? (
+          <circle
+            cx={SIZE / 2}
+            cy={SIZE / 2}
+            r={RADIUS}
+            fill="none"
+            stroke="white"
+            strokeWidth={STROKE}
+            strokeDasharray={CIRCUMFERENCE}
+            strokeDashoffset={strokeDashoffset}
+            strokeLinecap="round"
+          />
+        ) : null}
+      </svg>
+
+      {/* play/pause overlay */}
+      <button
+        type="button"
+        onClick={togglePlay}
+        className="absolute inset-0 flex items-center justify-center"
+        aria-label={isPlaying ? "Pause" : "Play"}
+      >
+        {!isPlaying ? (
+          <span className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-black/40 text-white shadow-lg backdrop-blur-[2px]">
+            <Play size={22} className="translate-x-[2px]" />
+          </span>
+        ) : null}
+      </button>
+
+      {/* duration badge */}
+      {timeLabel ? (
+        <span className="pointer-events-none absolute bottom-4 left-1/2 -translate-x-1/2 rounded-full bg-black/50 px-2 py-0.5 text-[10px] font-medium text-white">
+          {timeLabel}
+        </span>
+      ) : null}
+    </div>
+  );
+});
+
 const VoiceMessageChip = memo(
   ({ file }) => {
     const serverUrl =
@@ -1117,9 +1247,14 @@ export function MessageFiles({
     const type = resolveFileRenderType(file);
     return type === "image" || type === "video";
   });
-  const containerClass = hasMediaFiles
-    ? "mt-1 flex w-full max-w-full flex-col gap-2"
-    : "mt-1 inline-grid w-max max-w-full grid-cols-1 gap-2 justify-items-stretch";
+  const allVideoMessages =
+    files.length > 0 &&
+    files.every((file) => /^video-message-/i.test(String(file?.name || "")));
+  const containerClass = allVideoMessages
+    ? "mt-1 flex flex-col gap-2 items-start"
+    : hasMediaFiles
+      ? "mt-1 flex w-full max-w-full flex-col gap-2"
+      : "mt-1 inline-grid w-max max-w-full grid-cols-1 gap-2 justify-items-stretch";
 
   return (
     <div className={containerClass}>
@@ -1128,6 +1263,8 @@ export function MessageFiles({
         const isImage = renderType === "image";
         const isVideo = renderType === "video";
         const isAudio = renderType === "audio";
+        const isVideoMessage =
+          isVideo && /^video-message-/i.test(String(file?.name || ""));
         const videoUrl = String(file?.url || "");
         const isTranscodedOutput = videoUrl.includes("-h264-");
         const isProcessingVideo =
@@ -1222,6 +1359,17 @@ export function MessageFiles({
         }
 
         if (isProcessingVideo) {
+          if (isVideoMessage) {
+            return (
+              <div
+                key={key}
+                className="relative overflow-hidden rounded-full border-2 border-emerald-200/60 bg-slate-200/70 dark:border-emerald-500/30 dark:bg-slate-800/70"
+                style={{ width: "200px", height: "200px" }}
+              >
+                <div className="absolute inset-0 animate-pulse bg-slate-200/80 dark:bg-slate-800/80" />
+              </div>
+            );
+          }
           return (
             <div
               key={key}
@@ -1231,6 +1379,17 @@ export function MessageFiles({
                 <div className="absolute inset-0 animate-pulse bg-slate-200/80 dark:bg-slate-800/80" />
               </div>
             </div>
+          );
+        }
+
+        if (isVideoMessage && file.url) {
+          return (
+            <VideoMessageCircle
+              key={key}
+              file={file}
+              handleVideoThumbLoadedMetadata={handleVideoThumbLoadedMetadata}
+              cacheMediaAspectRatio={cacheMediaAspectRatio}
+            />
           );
         }
 

@@ -79,6 +79,9 @@ export default function ChatWindowPanel({
   pendingVoiceMessage,
   onVoiceRecorded,
   onClearPendingVoiceMessage,
+  pendingVideoMessage,
+  onVideoMessageRecorded,
+  onClearPendingVideoMessage,
   uploadError,
   activeUploadProgress,
   messageMaxChars = null,
@@ -532,6 +535,7 @@ export default function ChatWindowPanel({
     composerHeight,
     pendingUploadFiles?.length,
     pendingVoiceMessage,
+    pendingVideoMessage,
     replyTarget,
     chatScrollRef,
     isSmoothScrollLocked,
@@ -1486,6 +1490,9 @@ export default function ChatWindowPanel({
             onUploadFilesSelected={onUploadFilesSelected}
             onVoiceRecorded={onVoiceRecorded}
             onClearPendingVoiceMessage={onClearPendingVoiceMessage}
+            pendingVideoMessage={pendingVideoMessage}
+            onVideoMessageRecorded={onVideoMessageRecorded}
+            onClearPendingVideoMessage={onClearPendingVideoMessage}
             uploadError={uploadError}
             activeUploadProgress={activeUploadProgress}
             messageMaxChars={messageMaxChars}

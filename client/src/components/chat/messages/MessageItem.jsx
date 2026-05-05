@@ -188,12 +188,16 @@ export const MessageItem = memo(function MessageItem({
     ? summarizeFiles(messageFiles, String(msg?._uploadType || "").toLowerCase())
     : "";
   const getFileRenderType = messageFilesProps?.getFileRenderType;
+  const isVideoMessageFile = (file) =>
+    /^video-message-/i.test(String(file?.name || ""));
   const hasMediaFiles = getFileRenderType
     ? messageFiles.some((file) => {
         const type = getFileRenderType(file);
         return type === "image" || type === "video";
       })
     : true;
+  const isAllVideoMessages =
+    hasFiles && messageFiles.every((file) => isVideoMessageFile(file));
   const hasUploadInProgress =
     Array.isArray(msg._files) &&
     msg._files.length > 0 &&
@@ -898,9 +902,11 @@ export const MessageItem = memo(function MessageItem({
                   hasMarkdownCodeBlock ? "min-w-[9rem]" : "min-w-0"
                 } ${
                   hasFiles
-                    ? hasMediaFiles
-                      ? "w-[min(52vw,18rem)] md:w-[min(44vw,22rem)] md:min-w-[12rem]"
-                      : "w-fit max-w-full"
+                    ? isAllVideoMessages
+                      ? "w-fit"
+                      : hasMediaFiles
+                        ? "w-[min(52vw,18rem)] md:w-[min(44vw,22rem)] md:min-w-[12rem]"
+                        : "w-fit max-w-full"
                     : "w-fit max-w-full"
                 } bg-white/90 text-slate-800 rounded-bl-md dark:bg-slate-800/75 dark:text-slate-100`}
                 onDoubleClick={() => {
@@ -1050,9 +1056,11 @@ export const MessageItem = memo(function MessageItem({
                 hasMarkdownCodeBlock ? "min-w-[9rem]" : "min-w-0"
               } ${
                 hasFiles
-                  ? hasMediaFiles
-                    ? "w-[min(52vw,18rem)] max-w-[72%] md:w-[min(44vw,22rem)] md:max-w-[68%] md:min-w-[12rem]"
-                    : "w-fit max-w-[82%] sm:max-w-[86%] md:max-w-[80%]"
+                  ? isAllVideoMessages
+                    ? "w-fit"
+                    : hasMediaFiles
+                      ? "w-[min(52vw,18rem)] max-w-[72%] md:w-[min(44vw,22rem)] md:max-w-[68%] md:min-w-[12rem]"
+                      : "w-fit max-w-[82%] sm:max-w-[86%] md:max-w-[80%]"
                   : "max-w-[82%] sm:max-w-[86%] md:max-w-[80%]"
               } ${
                 isOwn

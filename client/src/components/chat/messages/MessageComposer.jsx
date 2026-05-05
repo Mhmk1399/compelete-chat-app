@@ -68,6 +68,9 @@ export function MessageComposer({
   composerInputRef,
   microphonePermissionStatus = "unknown",
   onRequestMicrophonePermission,
+  onVideoMessageRecorded,
+  pendingVideoMessage,
+  onClearPendingVideoMessage,
 }) {
   const composerRef = useRef(null);
   const fallbackInputRef = useRef(null);
@@ -86,6 +89,24 @@ export function MessageComposer({
   const recordingDurationMsRef = useRef(0);
   const isPressingMicRef = useRef(false);
   const pendingStopRef = useRef(false);
+  const pointerDownTimeRef = useRef(0);
+  const [videoMessageMode, setVideoMessageMode] = useState(false);
+  const [isVideoRecording, setIsVideoRecording] = useState(false);
+  const [videoRecordingMs, setVideoRecordingMs] = useState(0);
+  const videoMediaRecorderRef = useRef(null);
+  const videoRecordingStreamRef = useRef(null);
+  const videoRecordingChunksRef = useRef([]);
+  const videoRecordingTimerRef = useRef(null);
+  const videoRecordingStartRef = useRef(0);
+  const videoRecordingDurationMsRef = useRef(0);
+  const isPressingVideoRef = useRef(false);
+  const pendingVideoStopRef = useRef(false);
+  const videoLivePreviewRef = useCallback((el) => {
+    if (!el) return;
+    if (videoRecordingStreamRef.current) {
+      el.srcObject = videoRecordingStreamRef.current;
+    }
+  }, []);
   const maxTextareaHeight = 136;
   const openFilePicker = useCallback((inputRef) => {
     const input = inputRef?.current;
@@ -172,11 +193,11 @@ export function MessageComposer({
   const hasPendingVoice = Boolean(pendingVoiceMessage);
   const isEditMode = Boolean(editTarget);
   const micMode =
-    !isEditMode && !hasText && !hasPendingUploads && !hasPendingVoice && !isRecording;
+    !isEditMode && !hasText && !hasPendingUploads && !hasPendingVoice && !isRecording && !pendingVideoMessage && !isVideoRecording;
   const micDisabled = uploadBusy || !fileUploadEnabled || isEditMode;
   const canSubmitMessage = isEditMode
     ? hasText
-    : hasText || hasPendingUploads || hasPendingVoice;
+    : hasText || hasPendingUploads || hasPendingVoice || Boolean(pendingVideoMessage);
 
   useEffect(() => {
     applyTextareaSize({
@@ -298,6 +319,22 @@ export function MessageComposer({
     };
   }, []);
 
+  useEffect(() => {
+    return () => {
+      if (videoRecordingTimerRef.current) {
+        window.clearInterval(videoRecordingTimerRef.current);
+      }
+      if (videoRecordingStreamRef.current) {
+        videoRecordingStreamRef.current.getTracks()?.forEach((track) => track.stop());
+        videoRecordingStreamRef.current = null;
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    setVideoMessageMode(false);
+  }, [activeChatId]);
+
   const startRecordingTimer = () => {
     if (recordingTimerRef.current) {
       window.clearInterval(recordingTimerRef.current);
@@ -315,6 +352,36 @@ export function MessageComposer({
       recordingTimerRef.current = null;
     }
   };
+
+  const stopVideoRecording = useCallback(() => {
+    const recorder = videoMediaRecorderRef.current;
+    const canStop = recorder && recorder.state !== "inactive";
+    if (!isVideoRecording && !canStop) return;
+    videoRecordingDurationMsRef.current = Date.now() - videoRecordingStartRef.current;
+    setIsVideoRecording(false);
+    if (videoRecordingTimerRef.current) {
+      window.clearInterval(videoRecordingTimerRef.current);
+      videoRecordingTimerRef.current = null;
+    }
+    if (canStop) {
+      try {
+        if (recorder.state === "recording" && typeof recorder.requestData === "function") {
+          recorder.requestData();
+        }
+      } catch {
+        // no-op
+      }
+      try {
+        recorder.stop();
+      } catch {
+        // no-op
+      }
+    }
+    if (videoRecordingStreamRef.current) {
+      videoRecordingStreamRef.current.getTracks()?.forEach((track) => track.stop());
+      videoRecordingStreamRef.current = null;
+    }
+  }, [isVideoRecording]);
 
   const stopRecording = useCallback(() => {
     const recorder = mediaRecorderRef.current;
@@ -388,6 +455,39 @@ export function MessageComposer({
     };
   };
 
+  const createVideoFileFromChunks = async (chunks, durationSeconds) => {
+    if (!chunks.length) return null;
+    const preferredTypes = [
+      "video/webm;codecs=vp8,opus",
+      "video/webm;codecs=vp9,opus",
+      "video/webm",
+      "video/mp4",
+    ];
+    const mimeType =
+      preferredTypes.find(
+        (type) =>
+          typeof MediaRecorder !== "undefined" &&
+          MediaRecorder.isTypeSupported(type),
+      ) ||
+      chunks[0].type ||
+      "video/webm";
+    const ext = mimeType.includes("mp4") ? "mp4" : "webm";
+    const blob = new Blob(chunks, { type: mimeType });
+    const filename = `video-message-${Date.now()}.${ext}`;
+    let file = blob;
+    try {
+      if (typeof File !== "undefined") {
+        file = new File([blob], filename, { type: mimeType });
+      }
+    } catch {
+      file = blob;
+    }
+    if (file && !file.name) {
+      Object.defineProperty(file, "name", { value: filename, configurable: true });
+    }
+    return { file, durationSeconds, mimeType };
+  };
+
   const requestMicrophoneStream = async () => {
     if (
       typeof navigator === "undefined" ||
@@ -404,6 +504,128 @@ export function MessageComposer({
     }
     return navigator.mediaDevices.getUserMedia({ audio: true });
   };
+
+  const startVideoRecording = useCallback(async () => {
+    if (isVideoRecording) return;
+    if (pendingVideoMessage) return;
+    if (!fileUploadEnabled) return;
+    if (uploadBusy) return;
+    if (pendingUploadFiles?.length) return;
+    setShowUploadMenu(false);
+    videoRecordingChunksRef.current = [];
+    let stream;
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+    } catch {
+      isPressingVideoRef.current = false;
+      return;
+    }
+    if (!isPressingVideoRef.current) {
+      stream.getTracks()?.forEach((track) => track.stop());
+      return;
+    }
+    videoRecordingStreamRef.current = stream;
+    const options = {};
+    if (typeof MediaRecorder !== "undefined") {
+      if (MediaRecorder.isTypeSupported("video/webm;codecs=vp8,opus")) {
+        options.mimeType = "video/webm;codecs=vp8,opus";
+      } else if (MediaRecorder.isTypeSupported("video/webm")) {
+        options.mimeType = "video/webm";
+      }
+    }
+    const recorder = new MediaRecorder(stream, options);
+    videoMediaRecorderRef.current = recorder;
+    recorder.ondataavailable = (event) => {
+      if (event.data && event.data.size > 0) {
+        videoRecordingChunksRef.current.push(event.data);
+      }
+    };
+    recorder.onerror = (event) => {
+      console.warn("[video-msg] recorder error", event);
+    };
+    recorder.onstop = async () => {
+      const fallbackDurationMs = Date.now() - videoRecordingStartRef.current;
+      const durationMs = videoRecordingDurationMsRef.current || fallbackDurationMs;
+      const chunks = videoRecordingChunksRef.current;
+      videoRecordingChunksRef.current = [];
+      videoRecordingDurationMsRef.current = 0;
+      if (!chunks.length) {
+        console.warn("[video-msg] no chunks collected");
+        return;
+      }
+      if (durationMs <= 1000) {
+        return;
+      }
+      const durationSeconds = Math.max(1, Math.round(durationMs / 1000));
+      const payload = await createVideoFileFromChunks(chunks, durationSeconds);
+      if (payload && typeof onVideoMessageRecorded === "function") {
+        onVideoMessageRecorded(payload);
+      }
+    };
+    recorder.start(250);
+    setIsVideoRecording(true);
+    videoRecordingStartRef.current = Date.now();
+    setVideoRecordingMs(0);
+    videoRecordingTimerRef.current = window.setInterval(() => {
+      setVideoRecordingMs(Date.now() - videoRecordingStartRef.current);
+    }, 200);
+    if (pendingVideoStopRef.current || !isPressingVideoRef.current) {
+      pendingVideoStopRef.current = false;
+      stopVideoRecording();
+    }
+  }, [
+    isVideoRecording,
+    pendingVideoMessage,
+    fileUploadEnabled,
+    uploadBusy,
+    pendingUploadFiles?.length,
+    setShowUploadMenu,
+    stopVideoRecording,
+    onVideoMessageRecorded,
+  ]);
+
+  const handleCameraPointerDown = useCallback(
+    async (event) => {
+      event.preventDefault();
+      if (micDisabled) return;
+      isPressingVideoRef.current = true;
+      pendingVideoStopRef.current = false;
+      try {
+        await startVideoRecording();
+      } catch {
+        // ignore
+      }
+    },
+    [micDisabled, startVideoRecording],
+  );
+
+  const handleCameraPointerUp = useCallback(
+    (event) => {
+      event?.preventDefault?.();
+      isPressingVideoRef.current = false;
+      const recorder = videoMediaRecorderRef.current;
+      if (isVideoRecording || (recorder && recorder.state === "recording")) {
+        stopVideoRecording();
+        if (keepFocusRef.current) {
+          keepFocusRef.current = false;
+          requestAnimationFrame(() => {
+            messageInputRef.current?.focus?.({ preventScroll: true });
+            messageInputRef.current?.focus?.();
+          });
+        }
+        return;
+      }
+      pendingVideoStopRef.current = true;
+      if (keepFocusRef.current) {
+        keepFocusRef.current = false;
+        requestAnimationFrame(() => {
+          messageInputRef.current?.focus?.({ preventScroll: true });
+          messageInputRef.current?.focus?.();
+        });
+      }
+    },
+    [isVideoRecording, messageInputRef, stopVideoRecording],
+  );
 
   const startRecording = useCallback(async () => {
     if (isRecording) return;
@@ -573,6 +795,40 @@ export function MessageComposer({
       window.removeEventListener("pointercancel", handleWindowPointerUp);
     };
   }, [isRecording, messageInputRef, stopRecording]);
+
+  useEffect(() => {
+    if (!isVideoRecording) return;
+    const handleWindowPointerUp = (event) => {
+      event?.preventDefault?.();
+      isPressingVideoRef.current = false;
+      const recorder = videoMediaRecorderRef.current;
+      if (isVideoRecording || (recorder && recorder.state === "recording")) {
+        stopVideoRecording();
+        if (keepFocusRef.current) {
+          keepFocusRef.current = false;
+          requestAnimationFrame(() => {
+            messageInputRef.current?.focus?.({ preventScroll: true });
+            messageInputRef.current?.focus?.();
+          });
+        }
+        return;
+      }
+      pendingVideoStopRef.current = true;
+      if (keepFocusRef.current) {
+        keepFocusRef.current = false;
+        requestAnimationFrame(() => {
+          messageInputRef.current?.focus?.({ preventScroll: true });
+          messageInputRef.current?.focus?.();
+        });
+      }
+    };
+    window.addEventListener("pointerup", handleWindowPointerUp);
+    window.addEventListener("pointercancel", handleWindowPointerUp);
+    return () => {
+      window.removeEventListener("pointerup", handleWindowPointerUp);
+      window.removeEventListener("pointercancel", handleWindowPointerUp);
+    };
+  }, [isVideoRecording, messageInputRef, stopVideoRecording]);
 
   useEffect(() => {
     const handleWindowFocus = () => {
@@ -796,6 +1052,38 @@ export function MessageComposer({
           </div>
         </div>
       ) : null}
+      {pendingVideoMessage ? (
+        <div className="rounded-2xl border border-emerald-200/80 bg-emerald-50/70 p-2 dark:border-emerald-500/30 dark:bg-slate-950/70">
+          <div className="flex items-start gap-3 px-1">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-200">
+              <Video size={20} className="icon-anim-sway" />
+            </div>
+            <div className="flex min-w-0 flex-1 flex-col">
+              <span className="truncate text-[11px] font-semibold text-emerald-700 dark:text-emerald-200">
+                Video message
+              </span>
+              <span className="mt-1 text-xs text-slate-600 dark:text-slate-300">
+                {formatDuration(pendingVideoMessage.durationSeconds || 0)}
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                onClearPendingVideoMessage?.();
+                restoreComposerFocus();
+              }}
+              onPointerDown={(event) => {
+                captureComposerFocus();
+                if (!isDesktop) event.preventDefault();
+              }}
+              className="inline-flex h-9 w-9 items-center justify-center self-center rounded-full border border-rose-200 text-rose-600 transition hover:border-rose-300 hover:bg-rose-50 hover:shadow-[0_0_16px_rgba(244,63,94,0.2)] dark:border-rose-500/30 dark:text-rose-200 dark:hover:bg-rose-500/10"
+              aria-label="Cancel video message"
+            >
+              <Close size={20} className="icon-anim-pop" />
+            </button>
+          </div>
+        </div>
+      ) : null}
       {pendingUploadFiles?.length ? (
         <div className="rounded-2xl border border-emerald-200/80 bg-emerald-50/70 p-2 dark:border-emerald-500/30 dark:bg-slate-950/70">
           <div className="mb-2 flex items-center justify-between px-1 text-[11px] font-semibold text-emerald-700 dark:text-emerald-200">
@@ -933,7 +1221,7 @@ export function MessageComposer({
         </div>
       ) : null}
       <div className="flex flex-row items-center gap-3">
-        {!isRecording ? (
+        {!isRecording && !isVideoRecording ? (
           <>
             <div className="relative" ref={uploadMenuRef}>
               <button
@@ -1082,50 +1370,95 @@ export function MessageComposer({
             />
           </>
         ) : (
-          <div className="flex min-w-0 flex-1 items-center justify-between rounded-2xl border border-emerald-200 bg-white px-4 py-2 text-sm text-emerald-700 dark:border-emerald-500/30 dark:bg-slate-900 dark:text-emerald-200">
-            <span className="text-xs font-semibold uppercase tracking-wide">
-              Recording
-            </span>
-            <span className="flex items-center gap-2 text-sm font-semibold">
-              <span className="h-2.5 w-2.5 animate-pulse rounded-full bg-rose-500" />
-              {formatDuration(recordingMs / 1000)}
-            </span>
-            <span className="w-12" />
-          </div>
+          <>
+            {isVideoRecording ? (
+              <video
+                ref={videoLivePreviewRef}
+                autoPlay
+                muted
+                playsInline
+                className="h-11 w-11 shrink-0 rounded-full border-2 border-rose-400 object-cover shadow-md"
+                style={{ transform: "scaleX(-1)" }}
+              />
+            ) : null}
+            <div className="flex min-w-0 flex-1 items-center justify-between rounded-2xl border border-emerald-200 bg-white px-4 py-2 text-sm text-emerald-700 dark:border-emerald-500/30 dark:bg-slate-900 dark:text-emerald-200">
+              <span className="text-xs font-semibold uppercase tracking-wide">
+                {isVideoRecording ? "Recording video" : "Recording"}
+              </span>
+              <span className="flex items-center gap-2 text-sm font-semibold">
+                <span className="h-2.5 w-2.5 animate-pulse rounded-full bg-rose-500" />
+                {formatDuration(isVideoRecording ? videoRecordingMs / 1000 : recordingMs / 1000)}
+              </span>
+              <span className="w-12" />
+            </div>
+          </>
         )}
+        {micMode && !isRecording && !isVideoRecording ? (
+          <button
+            type="button"
+            title={videoMessageMode ? "Switch to voice message" : "Switch to video message"}
+            onPointerDown={(event) => {
+              captureComposerFocus();
+              if (!isDesktop) event.preventDefault();
+            }}
+            onClick={() => {
+              setVideoMessageMode((prev) => !prev);
+              restoreComposerFocus();
+            }}
+            className="inline-flex h-8 w-8 items-center justify-center rounded-xl border border-emerald-200 bg-white text-emerald-600 transition hover:border-emerald-300 hover:bg-emerald-50 dark:border-emerald-500/30 dark:bg-slate-900 dark:text-emerald-300 dark:hover:bg-emerald-500/10"
+            aria-label={videoMessageMode ? "Switch to voice message" : "Switch to video message"}
+          >
+            {videoMessageMode ? (
+              <Mic size={15} />
+            ) : (
+              <Video size={15} />
+            )}
+          </button>
+        ) : null}
         <button
-          type={micMode || isRecording ? "button" : "submit"}
+          type={micMode || isRecording || isVideoRecording ? "button" : "submit"}
           onPointerDown={(event) => {
             captureComposerFocus();
             if (!isDesktop) event.preventDefault();
-            if (micMode) {
+            pointerDownTimeRef.current = Date.now();
+            if (micMode && !videoMessageMode) {
               handleMicPointerDown(event);
+            } else if (micMode && videoMessageMode) {
+              handleCameraPointerDown(event);
             }
           }}
-          onPointerUp={isRecording ? handleMicPointerUp : undefined}
+          onPointerUp={
+            isRecording
+              ? handleMicPointerUp
+              : isVideoRecording
+                ? handleCameraPointerUp
+                : undefined
+          }
           onMouseDown={(event) => {
             if (!isDesktop) {
               event.preventDefault();
             }
           }}
           disabled={
-            ((micMode || isRecording) && micDisabled) ||
-            (!micMode && !isRecording && !canSubmitMessage)
+            ((micMode || isRecording || isVideoRecording) && micDisabled) ||
+            (!micMode && !isRecording && !isVideoRecording && !canSubmitMessage)
           }
           className={`inline-flex h-11 items-center justify-center rounded-2xl px-4 py-2 text-sm font-semibold text-white shadow-lg transition disabled:cursor-not-allowed disabled:opacity-70 ${
-            isRecording
+            isRecording || isVideoRecording
               ? "bg-rose-500 shadow-rose-500/30 hover:bg-rose-400 hover:shadow-rose-500/40"
               : "bg-emerald-500 shadow-emerald-500/30 hover:bg-emerald-400 hover:shadow-emerald-500/40"
           }`}
         >
-          {micMode || isRecording ? (
+          {isVideoRecording ? (
+            <Video className="icon-anim-pop" />
+          ) : micMode && videoMessageMode ? (
+            <Video className="icon-anim-pop" />
+          ) : micMode ? (
             <Mic className="icon-anim-pop" />
+          ) : editTarget ? (
+            <Check className="icon-anim-slide" />
           ) : (
-            editTarget ? (
-              <Check className="icon-anim-slide" />
-            ) : (
-              <Send className="icon-anim-slide" />
-            )
+            <Send className="icon-anim-slide" />
           )}
         </button>
       </div>

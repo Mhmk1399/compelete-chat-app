@@ -652,10 +652,19 @@ function registerMessageRoutes(app, deps) {
             file.originalname || "file",
           );
           const inferredMime = inferMimeFromFilename(originalName);
+          const rawMime = String(file.mimetype || "").toLowerCase();
+          // Some browsers/proxies send a generic MIME type (text/plain or
+          // application/octet-stream) for media files in multipart uploads.
+          // When that happens, fall back to the MIME type inferred from the
+          // file extension so that .webm/.mp4/.ogg files are correctly typed.
+          const isGenericMime =
+            !rawMime ||
+            rawMime === "text/plain" ||
+            rawMime === "application/octet-stream";
           const mimeType = (
-            file.mimetype ||
-            inferredMime ||
-            "application/octet-stream"
+            isGenericMime
+              ? inferredMime || rawMime || "application/octet-stream"
+              : rawMime
           ).toLowerCase();
 
           if (isDangerousUploadFile(originalName, mimeType)) {
@@ -666,7 +675,8 @@ function registerMessageRoutes(app, deps) {
 
           const kind = getUploadKind(uploadType, mimeType);
           if (!kind) {
-            throw new Error("Invalid file type for selected upload option.");
+            console.error("[upload] rejected:", { uploadType, mimeType, originalName });
+            throw new Error(`Invalid file type for selected upload option. (uploadType=${JSON.stringify(uploadType)}, mimeType=${JSON.stringify(mimeType)})`);
           }
 
           const meta = fileMeta[index] || {};
@@ -702,8 +712,17 @@ function registerMessageRoutes(app, deps) {
           uploadType,
         });
 
+        // Check ffmpeg availability but don't abort the upload if it's missing —
+        // fall back to storing the video as-is (WebM VP8 plays natively in browsers).
+        let canTranscode = false;
         if (shouldTranscodeVideos && hasVideoFiles) {
-          await ensureFfmpegAvailable();
+          try {
+            await ensureFfmpegAvailable();
+            canTranscode = true;
+          } catch {
+            // ffmpeg not available; skip transcoding, store file as uploaded
+            canTranscode = false;
+          }
         }
 
         if (hasVideoFiles && String(uploadType || "").toLowerCase() === "media") {
@@ -822,7 +841,7 @@ function registerMessageRoutes(app, deps) {
 
         let transcodeJobsQueued = 0;
 
-        if (shouldTranscodeVideos && hasVideoFiles) {
+        if (canTranscode && hasVideoFiles) {
           const insertedRows = listMessageFilesByMessageIds([Number(messageId)]);
           const insertedByStoredName = new Map();
 
@@ -864,7 +883,7 @@ function registerMessageRoutes(app, deps) {
             messageId: Number(messageId),
             username: user.username,
           });
-        } else if (shouldTranscodeVideos && hasVideoFiles && transcodeJobsQueued > 0) {
+        } else if (canTranscode && hasVideoFiles && transcodeJobsQueued > 0) {
           // Only show pending-conversion videos to the uploader.
           emitSseEvent(user.username, {
             type: "chat_message",
