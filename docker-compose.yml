@@ -1,25 +1,25 @@
 services:
-
   app:
     build: .
-    image: cheeta:test
+    image: cheeta:prod
     container_name: cheeta-app
     restart: unless-stopped
     env_file: .env
     volumes:
       - cheeta-data:/app/data
     expose:
-      - "5174"          # only reachable inside Docker network, NOT from host
-    depends_on: []
+      - "5174"
 
   nginx:
     image: nginx:alpine
     container_name: cheeta-nginx
     restart: unless-stopped
     ports:
-      - "80:80"         # this is the only port exposed to the outside world
+      - "80:80"
+      - "443:443"
     volumes:
       - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - /etc/letsencrypt:/etc/letsencrypt:ro
     depends_on:
       - app
 

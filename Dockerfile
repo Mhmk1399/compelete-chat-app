@@ -2,12 +2,12 @@
 FROM node:24-alpine AS client-builder
 WORKDIR /app
 
-# Copy package manifests first — Docker caches this layer.
-# If you don't change package.json, npm install won't re-run on rebuild.
-COPY package.json ./
-COPY client/package.json ./client/
+# Copy package manifests + lockfile first — Docker caches this layer.
+# If you don't change package.json, npm ci won't re-run on rebuild.
+COPY client/package.json client/package-lock.json ./client/
 
-RUN npm --prefix client install
+RUN --mount=type=cache,target=/tmp/npm-cache \
+    cd client && npm ci --cache /tmp/npm-cache
 
 # Copy the full client source, then build
 COPY client/ ./client/
@@ -24,8 +24,9 @@ RUN apk add --no-cache ffmpeg
 WORKDIR /app
 
 # Install only server production deps (--omit=dev skips devDependencies)
-COPY server/package.json ./server/
-RUN npm --prefix server install --omit=dev
+COPY server/package.json server/package-lock.json ./server/
+RUN --mount=type=cache,target=/tmp/npm-cache \
+    cd server && npm ci --omit=dev --cache /tmp/npm-cache
 
 # Copy server source code
 COPY server/ ./server/
